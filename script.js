@@ -45,7 +45,7 @@ function db(){ return JSON.parse(localStorage.getItem(APP_KEY) || '{}'); }
 function saveDb(d){ localStorage.setItem(APP_KEY, JSON.stringify(d)); }
 function nextId(arr, key){ return (arr && arr.reduce((m,x)=>Math.max(m, x[key]||0),0) || 0) + 1; }
 
-// Generic create for entity
+// Generic create for entity (obj keys must match)
 function createEntity(entity, obj){
   const d = db();
   d[entity] = d[entity] || [];
@@ -60,7 +60,7 @@ function deleteEntity(entity, keyName, value){
   saveDb(d);
 }
 
-// ----------------------- AUTH -----------------------
+// ----------------------- AUTH (simple) -----------------------
 function login(email, pass){
   if(email === 'aluno@example.com' && pass === '123'){ sessionStorage.setItem('ci_user', email); return true; }
   const d = db();
@@ -81,48 +81,475 @@ function renderOverview(){
   document.getElementById('stat-paises').textContent = (d.Pais||[]).length;
   document.getElementById('stat-pessoas').textContent = (d.Pessoa||[]).length;
   document.getElementById('stat-invests').textContent = (d.Investimento||[]).length;
-  document.getElementById('overviewText').textContent =
+  document.getElementById('overviewText').textContent = 
     `Clientes: ${(d.Cliente||[]).length}. Carteiras: ${(d.Carteira||[]).length}. Investimentos: ${(d.Investimento||[]).length}.`;
 
-  // ============================
-  // 🔧 PIE CHART CORRIGIDO
-  // ============================
+  // pie by Tipo using ItensCarteira counts
   const tipos = {};
-  const tiposMap = (d.Tipo || []).reduce((acc, t) => {
-    acc[t.Id_Tipo] = t.Tipo;
-    return acc;
-  }, {});
-
-  (d.ItensCarteira || []).forEach(it => {
-    const inv = (d.Investimento || []).find(x => x.Id_Investimento === it.Id_Investimento);
-    if (!inv) return;
+  const tiposMap = (d.Tipo||[]).reduce((a,t)=>{ a[t.Id_Tipo] = t.Tipo; return a; }, {});
+  (d.ItensCarteira||[]).forEach(it=>{
+    const inv = (d.Investimento||[]).find(x=>x.Id_Investimento === it.Id_Investimento);
+    if(!inv) return;
     const label = tiposMap[inv.Id_Tipo] || 'Outro';
-    tipos[label] = (tipos[label] || 0) + 1;
+    tipos[label] = (tipos[label]||0) + 1;
   });
 
   let labels = Object.keys(tipos);
   let values = labels.map(l => tipos[l]);
 
-  // Caso não existam investimentos, cria gráfico "placeholder"
+  // ---------- CORREÇÃO IMPORTANTE ----------
+  // Se não tiver nenhum investimento na carteira:
   if (labels.length === 0) {
     labels = ['Nenhum investimento'];
     values = [1];
   }
 
   const ctx = document.getElementById('overviewPie').getContext('2d');
-  if (overviewPieChart) overviewPieChart.destroy();
+  if(overviewPieChart) overviewPieChart.destroy();
 
   overviewPieChart = new Chart(ctx, {
-    type: 'pie',
-    data: {
+    type:'pie',
+    data:{
       labels,
-      datasets: [{
+      datasets:[{
         data: values,
-        backgroundColor: ['#ff7a00', '#fb8f24', '#1f2937', '#a3a3a3']
+        backgroundColor:['#ff7a00','#fb8f24','#1f2937','#a3a3a3']
       }]
     }
   });
 }
 
 // ----------------------- GENERIC ENTITY RENDERER -----------------------
-/* ... (continua igual, sem alterações) */
+function renderEntityScreen(descriptor){
+  requireAuthForView();
+  const view = document.getElementById('view-area'); view.innerHTML = '';
+  const tpl = document.getElementById('tpl-entity').content.cloneNode(true);
+  view.appendChild(tpl);
+
+  document.getElementById('entityTitle').textContent = descriptor.entity;
+
+  const formDiv = document.getElementById('entityForm');
+  formDiv.innerHTML = '';
+  const tableDiv = document.getElementById('entityTable');
+  tableDiv.innerHTML = '';
+
+  // Build form
+  const form = document.createElement('div');
+  descriptor.fields.forEach(field=>{
+    const row = document.createElement('div');
+    row.className = 'form-row';
+    const label = document.createElement('label');
+    label.textContent = field.label || field.name;
+    row.appendChild(label);
+
+    if(field.type === 'select'){
+      const sel = document.createElement('select');
+      sel.id = 'f_' + field.name;
+      const options = (db()[field.fk.entity]||[]);
+      const opt0 = document.createElement('option'); opt0.value=''; opt0.textContent='(selecione)'; sel.appendChild(opt0);
+      options.forEach(o=>{
+        const opt = document.createElement('option');
+        opt.value = o[field.fk.key];
+        opt.textContent = o[field.fk.labelKey] || o[field.fk.key];
+        sel.appendChild(opt);
+      });
+      row.appendChild(sel);
+
+    } else if(field.type === 'textarea'){
+      const ta = document.createElement('textarea'); ta.id = 'f_' + field.name; row.appendChild(ta);
+    } else {
+      const inp = document.createElement('input'); inp.id = 'f_' + field.name; inp.type = field.type || 'text'; row.appendChild(inp);
+    }
+
+    form.appendChild(row);
+  });
+
+  const addBtn = document.createElement('button'); 
+  addBtn.className='btn primary'; 
+  addBtn.textContent = 'Adicionar';
+
+  addBtn.onclick = () => {
+    const d = db();
+    const obj = {};
+    descriptor.fields.forEach(f=>{
+      const el = document.getElementById('f_' + f.name);
+      if(!el) return;
+      let val = el.value;
+      if(f.type === 'number') val = Number(val) || 0;
+      if(f.type === 'select') val = Number(val) || null;
+      obj[f.name] = val;
+    });
+
+    const pkField = descriptor.pk;
+    if(pkField && (!obj[pkField] || obj[pkField] === 0)){
+      d[descriptor.entity] = d[descriptor.entity] || [];
+      const next = nextId(d[descriptor.entity], pkField);
+      obj[pkField] = next;
+    }
+
+    d[descriptor.entity] = d[descriptor.entity] || [];
+    d[descriptor.entity].push(obj);
+    saveDb(d);
+    renderEntityScreen(descriptor);
+  };
+
+  form.appendChild(addBtn);
+  formDiv.appendChild(form);
+
+  const arr = db()[descriptor.entity] || [];
+  const table = document.createElement('table');
+  table.className='table';
+
+  const thead = document.createElement('thead');
+  const htr = document.createElement('tr');
+  descriptor.fields.forEach(f => { 
+    const th = document.createElement('th'); 
+    th.textContent = f.label || f.name; 
+    htr.appendChild(th); 
+  });
+  htr.appendChild(document.createElement('th')).textContent = 'Ações';
+  thead.appendChild(htr); table.appendChild(thead);
+
+  const tbody = document.createElement('tbody');
+  arr.forEach(rowObj=>{
+    const tr = document.createElement('tr');
+    descriptor.fields.forEach(f=>{
+      const td = document.createElement('td');
+      let v = rowObj[f.name];
+
+      if(f.type === 'select' && f.fk){
+        const fkArr = db()[f.fk.entity] || [];
+        const fkObj = fkArr.find(x => x[f.fk.key] == v) || {};
+        v = fkObj[f.fk.labelKey] || v;
+      }
+
+      td.textContent = v === undefined ? '' : v;
+      tr.appendChild(td);
+    });
+
+    const tdAct = document.createElement('td');
+    const del = document.createElement('button'); 
+    del.className='btn ghost'; 
+    del.textContent='Remover';
+
+    del.onclick = ()=>{
+      if(confirm('Remover?')){
+        deleteEntity(descriptor.entity, descriptor.pk, rowObj[descriptor.pk]);
+        renderEntityScreen(descriptor);
+      }
+    };
+
+    tdAct.appendChild(del);
+    tr.appendChild(tdAct);
+    tbody.appendChild(tr);
+  });
+
+  table.appendChild(tbody);
+  tableDiv.appendChild(table);
+}
+
+// ----------------------- ENTITY DESCRIPTORS -----------------------
+const ENTITIES = {
+  Pais: {
+    entity:'Pais', pk:'Id_Pais',
+    fields:[
+      {name:'Id_Pais', label:'ID', type:'number'},
+      {name:'Nome', label:'Nome', type:'text'}
+    ]
+  },
+  Estado: {
+    entity:'Estado', pk:'Id_Estado',
+    fields:[
+      {name:'Id_Estado', label:'ID', type:'number'},
+      {name:'Id_Pais', label:'País', type:'select', fk:{entity:'Pais', key:'Id_Pais', labelKey:'Nome'}},
+      {name:'Nome', label:'Nome', type:'text'}
+    ]
+  },
+
+  Endereco: {
+    entity:'Endereco', pk:'Id_Endereco',
+    fields:[
+      {name:'Id_Endereco', label:'ID', type:'number'},
+      {name:'Id_Estado', label:'Estado', type:'select', fk:{entity:'Estado', key:'Id_Estado', labelKey:'Nome'}}
+    ]
+  },
+
+  Pessoa:{
+    entity:'Pessoa', pk:'Id_Pessoa',
+    fields:[
+      {name:'Id_Pessoa', label:'ID', type:'number'},
+      {name:'Id_Endereco', label:'Endereço', type:'select', fk:{entity:'Endereco', key:'Id_Endereco', labelKey:'Id_Endereco'}},
+      {name:'Nome', label:'Nome', type:'text'},
+      {name:'Sobrenome', label:'Sobrenome', type:'text'},
+      {name:'Email', label:'Email', type:'text'},
+      {name:'Sexo', label:'Sexo', type:'text'},
+      {name:'Telefone', label:'Telefone', type:'text'},
+      {name:'Data_Nascimento', label:'Data Nasc', type:'text'}
+    ]
+  },
+
+  Departamento:{ 
+    entity:'Departamento', pk:'Id_Departamento',
+    fields:[
+      {name:'Id_Departamento', label:'ID', type:'number'},
+      {name:'Nome', label:'Nome', type:'text'}
+    ]
+  },
+
+  Cargo:{ 
+    entity:'Cargo', pk:'Id_Cargo',
+    fields:[
+      {name:'Id_Cargo', label:'ID', type:'number'},
+      {name:'Nome', label:'Nome', type:'text'},
+      {name:'Salario_Base', label:'Salário Base', type:'number'}
+    ]
+  },
+
+  Contrato:{ 
+    entity:'Contrato', pk:'Id_Contrato',
+    fields:[
+      {name:'Id_Contrato', label:'ID', type:'number'},
+      {name:'Id_Departamento', label:'Departamento', type:'select', fk:{entity:'Departamento', key:'Id_Departamento', labelKey:'Nome'}},
+      {name:'Id_Cargo', label:'Cargo', type:'select', fk:{entity:'Cargo', key:'Id_Cargo', labelKey:'Nome'}},
+      {name:'Data_Contrato', label:'Data Contrato', type:'text'}
+    ]
+  },
+
+  Status:{ 
+    entity:'Status', pk:'Id_Status',
+    fields:[
+      {name:'Id_Status', label:'ID', type:'number'},
+      {name:'Status', label:'Status', type:'text'},
+      {name:'Data_Atribuicao', label:'Data', type:'text'}
+    ]
+  },
+
+  Funcionario:{ 
+    entity:'Funcionario', pk:'Id_Funcionario',
+    fields:[
+      {name:'Id_Funcionario', label:'ID', type:'number'},
+      {name:'Id_Pessoa', label:'Pessoa', type:'select', fk:{entity:'Pessoa', key:'Id_Pessoa', labelKey:'Nome'}},
+      {name:'Id_Contrato', label:'Contrato', type:'select', fk:{entity:'Contrato', key:'Id_Contrato', labelKey:'Id_Contrato'}},
+      {name:'Id_Status', label:'Status', type:'select', fk:{entity:'Status', key:'Id_Status', labelKey:'Status'}}
+    ]
+  },
+
+  Bonus:{ 
+    entity:'Bonus', pk:'Id_Bonus',
+    fields:[
+      {name:'Id_Bonus', label:'ID', type:'number'},
+      {name:'Id_Funcionario', label:'Funcionário', type:'select', fk:{entity:'Funcionario', key:'Id_Funcionario', labelKey:'Id_Funcionario'}},
+      {name:'Valor', label:'Valor', type:'number'},
+      {name:'Data_Atribuicao', label:'Data', type:'text'},
+      {name:'Descricao', label:'Descrição', type:'text'}
+    ]
+  },
+
+  Situacao:{ 
+    entity:'Situacao', pk:'Id_Situacao',
+    fields:[
+      {name:'Id_Situacao', label:'ID', type:'number'},
+      {name:'Situacao', label:'Situação', type:'text'},
+      {name:'Data_Atribuicao', label:'Data', type:'text'},
+      {name:'Descricao', label:'Descrição', type:'text'}
+    ]
+  },
+
+  Consultor:{ 
+    entity:'Consultor', pk:'Id_Consultor',
+    fields:[
+      {name:'Id_Consultor', label:'ID', type:'number'},
+      {name:'Id_Funcionario', label:'Funcionário', type:'select', fk:{entity:'Funcionario', key:'Id_Funcionario', labelKey:'Id_Funcionario'}},
+      {name:'Id_Situacao', label:'Situação', type:'select', fk:{entity:'Situacao', key:'Id_Situacao', labelKey:'Situacao'}},
+      {name:'Descricao', label:'Descrição', type:'text'}
+    ]
+  },
+
+  Perfil:{ 
+    entity:'Perfil', pk:'Id_Perfil',
+    fields:[
+      {name:'Id_Perfil', label:'ID', type:'number'},
+      {name:'Perfil', label:'Perfil', type:'text'}
+    ]
+  },
+
+  Cliente:{ 
+    entity:'Cliente', pk:'Id_Cliente',
+    fields:[
+      {name:'Id_Cliente', label:'ID', type:'number'},
+      {name:'Id_Pessoa', label:'Pessoa', type:'select', fk:{entity:'Pessoa', key:'Id_Pessoa', labelKey:'Nome'}},
+      {name:'Id_Perfil', label:'Perfil', type:'select', fk:{entity:'Perfil', key:'Id_Perfil', labelKey:'Perfil'}},
+      {name:'Data_Registro', label:'Data Registro', type:'text'}
+    ]
+  },
+
+  PessoaFisica:{ 
+    entity:'PessoaFisica', pk:'Id_Cliente',
+    fields:[
+      {name:'Id_Cliente', label:'ID Cliente', type:'number'},
+      {name:'CPF', label:'CPF', type:'text'}
+    ]
+  },
+
+  PessoaJuridica:{ 
+    entity:'PessoaJuridica', pk:'Id_Cliente',
+    fields:[
+      {name:'Id_Cliente', label:'ID Cliente', type:'number'},
+      {name:'CNPJ', label:'CNPJ', type:'text'},
+      {name:'Razao_Social', label:'Razão Social', type:'text'}
+    ]
+  },
+
+  Carteira:{ 
+    entity:'Carteira', pk:'Id_Carteira',
+    fields:[
+      {name:'Id_Carteira', label:'ID', type:'number'},
+      {name:'Id_Cliente', label:'Cliente', type:'select', fk:{entity:'Cliente', key:'Id_Cliente', labelKey:'Id_Cliente'}},
+      {name:'Nome', label:'Nome', type:'text'},
+      {name:'Data_Criacao', label:'Data Criação', type:'text'}
+    ]
+  },
+
+  Risco:{ 
+    entity:'Risco', pk:'Id_Risco',
+    fields:[
+      {name:'Id_Risco', label:'ID', type:'number'},
+      {name:'Risco', label:'Risco', type:'text'}
+    ]
+  },
+
+  Tipo:{ 
+    entity:'Tipo', pk:'Id_Tipo',
+    fields:[
+      {name:'Id_Tipo', label:'ID', type:'number'},
+      {name:'Tipo', label:'Tipo', type:'text'}
+    ]
+  },
+
+  Investimento:{ 
+    entity:'Investimento', pk:'Id_Investimento',
+    fields:[
+      {name:'Id_Investimento', label:'ID', type:'number'},
+      {name:'Id_Tipo', label:'Tipo', type:'select', fk:{entity:'Tipo', key:'Id_Tipo', labelKey:'Tipo'}},
+      {name:'Id_Risco', label:'Risco', type:'select', fk:{entity:'Risco', key:'Id_Risco', labelKey:'Risco'}},
+      {name:'Nome', label:'Nome', type:'text'},
+      {name:'Rentabilidade_Prevista', label:'Rentabilidade', type:'number'},
+      {name:'Descricao', label:'Descrição', type:'text'}
+    ]
+  },
+
+  ItensCarteira:{ 
+    entity:'ItensCarteira', pk:'Id_Carteira',
+    fields:[
+      {name:'Id_Carteira', label:'Carteira', type:'select', fk:{entity:'Carteira', key:'Id_Carteira', labelKey:'Nome'}},
+      {name:'Id_Investimento', label:'Investimento', type:'select', fk:{entity:'Investimento', key:'Id_Investimento', labelKey:'Nome'}},
+      {name:'Data_Aquisicao', label:'Data Aquisição', type:'text'}
+    ]
+  },
+
+};
+
+// ----------------------- NAVIGATION -----------------------
+function requireAuthForView(){ 
+  if(!isAuth()){
+    alert('Sessão expirada — faça login');
+    document.getElementById('app').classList.add('hidden');
+    document.getElementById('login-screen').classList.remove('hidden');
+  }
+}
+
+function navigateToRoute(route){
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  const btn = Array.from(document.querySelectorAll('.nav-btn')).find(x=>x.dataset.route === route);
+  if(btn) btn.classList.add('active');
+
+  if(route === 'overview'){ renderOverview(); return; }
+  if(route === 'Chat' || route === 'chat'){ renderChat(); return; }
+
+  const desc = ENTITIES[route];
+  if(desc){ renderEntityScreen(desc); return; }
+
+  document.getElementById('view-area').innerHTML = 
+    '<div class="card">Rota não encontrada</div>';
+}
+
+// ----------------------- CHAT -----------------------
+const QUICK_PHRASES = ['Olá','Meus investimentos','Risco','Quero orientação'];
+
+function renderChat(){
+  requireAuthForView();
+  const view = document.getElementById('view-area'); 
+  view.innerHTML = '';
+  const tpl = document.getElementById('tpl-chat').content.cloneNode(true);
+  view.appendChild(tpl);
+
+  const qbox = document.getElementById('quick-btns');
+  QUICK_PHRASES.forEach(p=>{
+    const b = document.createElement('button'); 
+    b.className='quick-btn'; 
+    b.textContent=p; 
+    b.onclick=()=> sendChat(p);
+    qbox.appendChild(b);
+  });
+
+  document.getElementById('chat-send').onclick = ()=>{
+    const v = document.getElementById('chat-input').value.trim();
+    if(!v) return;
+    sendChat(v);
+    document.getElementById('chat-input').value = '';
+  };
+}
+
+function sendChat(text){
+  const history = document.getElementById('chat-history');
+  const userHtml = `<div class="msg user"><div class="bubble">${escapeHtml(text)}</div></div>`;
+  history.innerHTML += userHtml;
+  history.scrollTop = history.scrollHeight;
+
+  const t = text.toLowerCase();
+  let reply = 'Desculpe, não entendi. Pergunte sobre investimentos, risco ou carteira.';
+  if(t.includes('invest')) reply = 'Você possui ' + (db().ItensCarteira||[]).length + ' itens na carteira.';
+  if(t.includes('risco')) reply = 'Riscos disponíveis: ' + (db().Risco||[]).map(r=>r.Risco).join(', ');
+  if(t.includes('orient')) reply = 'Agende uma orientação com nossos consultores.';
+
+  setTimeout(()=>{
+    history.innerHTML += `<div class="msg bot"><div class="bubble">${reply}</div></div>`;
+    history.scrollTop = history.scrollHeight;
+  }, 300);
+}
+
+// ----------------------- UTILS -----------------------
+function escapeHtml(s){ 
+  return String(s||'')
+    .replaceAll('&','&amp;')
+    .replaceAll('<','&lt;')
+    .replaceAll('>','&gt;');
+}
+
+// ----------------------- APP INIT -----------------------
+function initApp(){
+  seedIfEmpty();
+
+  document.getElementById('btn-login').onclick = ()=>{
+    const email = document.getElementById('login-email').value.trim();
+    const pass = document.getElementById('login-pass').value.trim();
+    if(login(email, pass)){
+      document.getElementById('login-screen').classList.add('hidden');
+      document.getElementById('app').classList.remove('hidden');
+      navigateToRoute('overview');
+    } else {
+      document.getElementById('login-error').textContent = 'Credenciais inválidas';
+    }
+  };
+
+  document.getElementById('btn-logout').onclick = ()=> logout();
+
+  document.querySelectorAll('.nav-btn').forEach(b=>{
+    b.addEventListener('click', e=>{
+      const route = e.currentTarget.dataset.route;
+      navigateToRoute(route);
+    });
+  });
+}
+
+document.addEventListener('DOMContentLoaded', initApp);
