@@ -1,102 +1,152 @@
-<!DOCTYPE html>
+
+ <!doctype html>
 <html lang="pt-BR">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CoorinInvest — Login</title>
-    <link rel="stylesheet" href="style.css">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>CoorinInvest — Demo Completa (DER)</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
-
 <body>
 
-<!-- ================================
-         LOGIN SCREEN
-================================ -->
-<div id="login-screen" class="screen">
-
-    <div class="login-container">
-        <div class="login-box">
-
-            <h1 class="app-title">CoorinInvest</h1>
-            <p class="subtitle">Acesso ao Painel</p>
-
-            <label for="login-email">E-mail</label>
-            <input id="login-email" type="email" value="aluno@example.com">
-
-            <label for="login-pass">Senha</label>
-            <input id="login-pass" type="password" value="123">
-
-            <button id="btn-login" class="btn-login">
-                Entrar
-            </button>
-
-            <p class="demo-info">
-                Use <b>aluno@example.com</b> / <b>123</b> para entrar.
-            </p>
-
-        </div>
+<!-- LOGIN SCREEN -->
+<div id="login-screen" class="page-center">
+  <div class="card auth-card">
+    <div class="brand">
+      <div class="logo">CI</div>
+      <div><h1>CoorinInvest</h1><p class="muted">Sistema de Gerenciamento</p></div>
     </div>
+
+    <div class="form-row">
+      <label>E-mail</label>
+      <input id="login-email" value="aluno@example.com" />
+    </div>
+    <div class="form-row">
+      <label>Senha</label>
+      <input id="login-pass" type="password" value="123" />
+    </div>
+    <div class="form-row">
+      <button id="btn-login" class="btn primary">Entrar</button>
+    </div>
+    <p class="muted small">Use <b>aluno@example.com</b> / <b>123</b></p>
+    <p id="login-error" class="error-text"></p>
+  </div>
 </div>
 
-<!-- ================================
-         DASHBOARD SCREEN
-================================ -->
-<div id="dashboard-screen" class="screen hidden">
+<!-- APPLICATION (hidden until login) -->
+<div id="app" class="hidden">
 
-    <header class="topbar">
-        <h2>CoorinInvest — Dashboard</h2>
-    </header>
-
-    <div class="dashboard">
-
-        <!-- ====== GRÁFICO ====== -->
-        <section class="card">
-            <h3>Distribuição por Tipo (Rentabilidade Somada)</h3>
-            <canvas id="investPieChart" height="200"></canvas>
-        </section>
-
-        <!-- ====== TABELA ====== -->
-        <section class="card">
-            <h3>Investimentos</h3>
-
-            <table class="table">
-                <thead>
-                    <tr>
-                        <th>Nome</th>
-                        <th>Tipo</th>
-                        <th>Rentabilidade</th>
-                    </tr>
-                </thead>
-                <tbody id="tbody-invest"></tbody>
-            </table>
-        </section>
-
-        <!-- ====== ADICIONAR ====== -->
-        <section class="card">
-            <h3>Adicionar Investimento</h3>
-
-            <label>Nome</label>
-            <input id="inv-name" placeholder="Ex: PETR4">
-
-            <label>Tipo</label>
-            <select id="inv-type">
-                <option value="1">Ações</option>
-                <option value="2">Cripto</option>
-                <option value="3">Renda Fixa</option>
-                <option value="4">ETFs</option>
-            </select>
-
-            <label>Rentabilidade (%)</label>
-            <input id="inv-rent" type="number" step="0.1" placeholder="ex: 7.5">
-
-            <button id="btn-add-inv" class="btn-add">
-                Adicionar
-            </button>
-        </section>
-
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand-left"><div class="logo small">CI</div><div><strong>CoorinInvest</strong></div></div>
+      <div class="top-actions">
+        
+        <button class="btn" id="btn-logout">Sair</button>
+      </div>
     </div>
+  </header>
+
+  <div class="container main-grid">
+    <aside class="sidebar card">
+      <nav>
+        <button class="nav-btn active" data-route="overview">Visão Geral</button>
+
+        <!-- Entities grouped -->
+        <h4 class="muted small">Cadastros</h4>
+        <button class="nav-btn" data-route="Pais">País</button>
+        <button class="nav-btn" data-route="Estado">Estado</button>
+        <button class="nav-btn" data-route="Endereco">Endereço</button>
+        <button class="nav-btn" data-route="Pessoa">Pessoa</button>
+
+        <h4 class="muted small">Recursos Humanos</h4>
+        <button class="nav-btn" data-route="Departamento">Departamento</button>
+        <button class="nav-btn" data-route="Cargo">Cargo</button>
+        <button class="nav-btn" data-route="Contrato">Contrato</button>
+        <button class="nav-btn" data-route="Status">Status</button>
+        <button class="nav-btn" data-route="Funcionario">Funcionário</button>
+        <button class="nav-btn" data-route="Bonus">Bônus</button>
+        <button class="nav-btn" data-route="Situacao">Situação</button>
+        <button class="nav-btn" data-route="Consultor">Consultor</button>
+
+        <h4 class="muted small">Clientes & Carteira</h4>
+        <button class="nav-btn" data-route="Perfil">Perfil</button>
+        <button class="nav-btn" data-route="Cliente">Cliente</button>
+        <button class="nav-btn" data-route="PessoaFisica">Pessoa Física</button>
+        <button class="nav-btn" data-route="PessoaJuridica">Pessoa Jurídica</button>
+        <button class="nav-btn" data-route="Carteira">Carteira</button>
+
+        <h4 class="muted small">Investimentos</h4>
+        <button class="nav-btn" data-route="Tipo">Tipo</button>
+        <button class="nav-btn" data-route="Risco">Risco</button>
+        <button class="nav-btn" data-route="Investimento">Investimento</button>
+        <button class="nav-btn" data-route="ItensCarteira">Itens Carteira</button>
+
+       
+
+        <div class="sidebar-footer muted small">Dados simulados baseados no DER</div>
+      </nav>
+    </aside>
+
+    <main class="content">
+      <section id="view-area" class="card"></section>
+    </main>
+  </div>
 </div>
+
+<!-- TEMPLATES for each screen: form + table -->
+<!-- Overview -->
+<template id="tpl-overview">
+  <div class="grid-3">
+    <div class="stat card small">
+      <div class="stat-title">Países</div>
+      <div class="stat-value" id="stat-paises">0</div>
+    </div>
+    <div class="stat card small">
+      <div class="stat-title">Pessoas</div>
+      <div class="stat-value" id="stat-pessoas">0</div>
+    </div>
+    <div class="stat card small">
+      <div class="stat-title">Investimentos</div>
+      <div class="stat-value" id="stat-invests">0</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Distribuição por Tipo</h3>
+    <canvas id="overviewPie" height="200"></canvas>
+  </div>
+
+  <div class="card">
+    <h3>Resumo</h3>
+    <p id="overviewText"></p>
+  </div>
+</template>
+
+<!-- Generic entity template (form + table) -->
+<template id="tpl-entity">
+  <div class="card">
+    <h3 id="entityTitle"></h3>
+    <div id="entityForm"></div>
+  </div>
+  <div class="card">
+    <h4>Lista</h4>
+    <div id="entityTable"></div>
+  </div>
+</template>
+
+<!-- Chat template -->
+<template id="tpl-chat">
+  <div class="card chat-card">
+    <h3>Chat com Consultor</h3>
+    <div id="chat-history" class="chat-history"></div>
+    <div class="chat-actions">
+      <div class="quick-btns" id="quick-btns"></div>
+      <input id="chat-input" placeholder="Faça sua pergunta">
+      <button class="btn" id="chat-send">Enviar</button>
+    </div>
+  </div>
+</template>
 
 <script src="script.js"></script>
 </body>
